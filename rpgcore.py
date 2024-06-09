@@ -1,105 +1,21 @@
 import json
 import random
-import sqlite3
-from discord.ext import commands
 
 import rpg.rpglocations  # Import your locations module
+from database import DatabaseConnection
 from rpg.rpgitems import items
 from rpg.rpgquest import LymianEmpire
 
-class DatabaseCog(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        self.conn = self.init_db()
+# Initialize the database connection
+db = DatabaseConnection("chat_history.db")
 
-    def init_db(self):
-        conn = sqlite3.connect("rpg.db")
-        create_table_query = """
-        CREATE TABLE IF NOT EXISTS players (
-            discord_id TEXT PRIMARY KEY,
-            level INTEGER,
-            exp INTEGER,
-            gold INTEGER,
-            max_health INTEGER,
-            current_health INTEGER,
-            base_attack INTEGER,
-            base_defense INTEGER,
-            inventory TEXT,
-            equipment TEXT,
-            stat_points INTEGER,
-            lymian_empire_state TEXT
-        );
-        """
-        conn.execute(create_table_query)
-        conn.commit()
-        return conn
 
-    @classmethod
-    def load_from_db(cls, conn, discord_id):
-        query = """
-            SELECT level, exp, gold, max_health, current_health, base_attack, base_defense, inventory, equipment, 
-            stat_points, lymian_empire_state  
-            FROM players
-            WHERE discord_id = ?
-        """
-        cursor = conn.execute(query, (discord_id,))
-        result = cursor.fetchone()
-        if result:
-            data = result
+class State:
+    def __init__(self):
+        self.active_quest = None
 
-            player = Player(discord_id)
-            player.level = data[0]
-            player.exp = data[1]
-            player.gold = data[2]
-            player.max_health = data[3]
-            player.current_health = data[4]
-            player.base_attack = data[5]
-            player.base_defense = data[6]
-            player.stat_points = data[9]  # Load unallocated stat points
-            if len(data) > 10:
-                le_data = json.loads(data[10]) if data[10] else {}
-                player.lymian_empire_state = LymianEmpire()
-                player.lymian_empire_state.__dict__.update(le_data)
-            else:
-                print("Failed to load LymianEmpire state: data tuple does not contain an element at index 10.")
 
-            if len(data) > 7:
-                player.inventory = json.loads(data[7]) if data[7] else {}
-            else:
-                print("Failed to load inventory: data tuple does not contain an element at index 7.")
-
-            if len(data) > 8:
-                player.equipment = json.loads(data[8]) if data[8] else {'armor': None, 'weapon': None}
-            else:
-                print("Failed to load equipment: data tuple does not contain an element at index 8.")
-
-            return player
-
-    def save_to_db(self, conn, player):
-        query = """
-        REPLACE INTO players (
-            discord_id, level, exp, gold, max_health, current_health, 
-            base_attack, base_defense, inventory, equipment, stat_points, 
-            lymian_empire_state
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        serialized_lymian_empire_state = json.dumps(player.lymian_empire_state.__dict__)
-        conn.execute(query, (
-            player.discord_id,
-            player.level,
-            player.exp,
-            player.gold,
-            player.max_health,
-            player.current_health,
-            player.base_attack,
-            player.base_defense,
-            json.dumps(player.inventory),
-            json.dumps(player.equipment),
-            player.stat_points,
-            serialized_lymian_empire_state  # Save the serialized Lymian Empire state
-        ))
-        conn.commit()
+# In your Player class' __init__ method
 
 class Player:
     def __init__(self, discord_id):
@@ -157,6 +73,47 @@ class Player:
             return item_name  # Return the name of the equipped item
         else:
             return None  # Item not found in inventory
+
+    @classmethod
+    def load_from_db(cls, db, discord_id):
+        # Load player data from the database
+        query = """
+            SELECT level, exp, gold, max_health, current_health, base_attack, base_defense, inventory, equipment, 
+            stat_points, lymian_empire_state  
+            FROM players
+            WHERE discord_id = ?
+        """
+        result = db.fetchall(query, (discord_id,))
+        if result:
+            data = result[0]
+
+            player = cls(discord_id)
+            player.level = data[0]
+            player.exp = data[1]
+            player.gold = data[2]
+            player.max_health = data[3]
+            player.current_health = data[4]
+            player.base_attack = data[5]
+            player.base_defense = data[6]
+            player.stat_points = data[9]  # Load unallocated stat points
+            if len(data) > 10:
+                le_data = json.loads(data[10]) if data[10] else {}
+                player.lymian_empire_state = LymianEmpire()
+                player.lymian_empire_state.__dict__.update(le_data)
+            else:
+                print("Failed to load LymianEmpire state: data tuple does not contain an element at index 10.")
+
+            if len(data) > 7:
+                player.inventory = json.loads(data[7]) if data[7] else {}
+            else:
+                print("Failed to load inventory: data tuple does not contain an element at index 7.")
+
+            if len(data) > 8:
+                player.equipment = json.loads(data[8]) if data[8] else {'armor': None, 'weapon': None}
+            else:
+                print("Failed to load equipment: data tuple does not contain an element at index 8.")
+
+            return player
 
     def calculate_attack(self):
         # Calculate the player's attack based on their base attack and equipped weapon (if any)
@@ -235,7 +192,7 @@ class Player:
         damage = max(0, self.calculate_attack() - enemy_defense)
         return damage
 
-    def save_to_db(self, conn):
+    def save_to_db(self, db):
         query = """
         REPLACE INTO players (
             discord_id, level, exp, gold, max_health, current_health, 
@@ -245,7 +202,7 @@ class Player:
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         serialized_lymian_empire_state = json.dumps(self.lymian_empire_state.__dict__)
-        conn.execute(query, (
+        db.execute(query, (
             self.discord_id,
             self.level,
             self.exp,
@@ -259,7 +216,6 @@ class Player:
             self.stat_points,
             serialized_lymian_empire_state  # Save the serialized Lymian Empire state
         ))
-        conn.commit()
 
     def use_health_potion(self):
         # Use a health potion to restore health
@@ -283,10 +239,9 @@ class NPC:
 
 # Define an interaction function for the Blacksmith NPC
 
+
 # Dictionary to store Player objects, using Discord IDs as keys
 players = {}
 
 
-# Add the cog to the bot
-def setup(bot):
-    bot.add_cog(DatabaseCog(bot))
+
