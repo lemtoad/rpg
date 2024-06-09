@@ -8,7 +8,7 @@ from rpg.disgameleader import get_level_leaderboard
 from rpg.rpgblacksmnith import buy_from_blacksmith, sell_to_blacksmith
 
 # Establishing the database connection
-db = DatabaseConnection("chat_history.db")
+db = DatabaseConnection("rpg.db.db")
 
 
 class RPGCommands(commands.Cog):
