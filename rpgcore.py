@@ -13,7 +13,7 @@ class DatabaseCog(commands.Cog):
         self.conn = self.init_db()
 
     def init_db(self):
-        conn = sqlite3.connect("new_chat_history.db")
+        conn = sqlite3.connect("rpg.db")
         create_table_query = """
         CREATE TABLE IF NOT EXISTS players (
             discord_id TEXT PRIMARY KEY,
