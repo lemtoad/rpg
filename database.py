@@ -6,7 +6,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class DatabaseConnection:
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str = 'chat_history.db') -> None:
         try:
             self.conn = sqlite3.connect(db_path, check_same_thread=False)
             self.c = self.conn.cursor()
